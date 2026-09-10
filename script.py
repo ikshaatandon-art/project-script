@@ -220,15 +220,7 @@ def generate_html_report(report_data):
             st_class = "status-200" if r["status"] == 200 else "status-warn"
             st_text = f"HTTP {r['status']}"
             def_text = "VULNERABLE (Accepted)" if r["status"] == 200 else "THROTTLED"
-            html += f """
-          <tr>
-            <td>Worker {r['worker']}</td>
-            <td>Request #{r['seq']}</td>
-            <td class="{st_class}">{st_text}</td>
-            <td>{r['latency_ms']} ms</td>
-            <td class="{st_class}">{def_text}</td>
-          </tr>
-  """
+
         html += """
         </tbody>
       </table>
