@@ -1,8 +1,8 @@
-from flask import Flask, render_template_string, jsonify, Response
+from flask import Flask, render_template_string, jsonify
 import time
-import io
+import subprocess
 import sys
-from script import print_numbers, get_numbers_list
+import os
 
 app = Flask(__name__)
 
@@ -12,18 +12,18 @@ HTML_TEMPLATE = """
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Python Script Runner &mdash; Render Deployment</title>
+  <title>Python Universal Script Runner &mdash; Render Deployment</title>
   <style>
     :root {
       --bg-primary: #0b0f19;
       --bg-card: #151d30;
       --accent: #38bdf8;
-      --accent-hover: #0284c7;
       --text: #f8fafc;
       --text-muted: #94a3b8;
       --terminal-bg: #030712;
       --border: #1e293b;
       --success: #22c55e;
+      --error: #ef4444;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -38,17 +38,17 @@ HTML_TEMPLATE = """
       box-sizing: border-box;
     }
     .container {
-      max-width: 800px;
+      max-width: 860px;
       width: 100%;
     }
     .header {
       text-align: center;
-      margin-bottom: 30px;
+      margin-bottom: 25px;
     }
     .header h1 {
       font-size: 28px;
       color: var(--accent);
-      margin: 0 0 10px 0;
+      margin: 0 0 8px 0;
     }
     .header p {
       color: var(--text-muted);
@@ -78,7 +78,7 @@ HTML_TEMPLATE = """
       gap: 15px;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 18px;
       flex-wrap: wrap;
     }
     .btn {
@@ -133,7 +133,7 @@ HTML_TEMPLATE = """
     .dot-green { background: #22c55e; }
     .terminal-body {
       padding: 16px;
-      height: 380px;
+      height: 420px;
       overflow-y: auto;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 13px;
@@ -148,9 +148,23 @@ HTML_TEMPLATE = """
       background: #334155;
       border-radius: 4px;
     }
+    .info-callout {
+      margin-top: 15px;
+      font-size: 13px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 15px;
+      line-height: 1.5;
+    }
+    .info-callout code {
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
     .footer {
       text-align: center;
-      margin-top: 30px;
+      margin-top: 25px;
       font-size: 13px;
       color: var(--text-muted);
     }
@@ -163,16 +177,16 @@ HTML_TEMPLATE = """
 <body>
   <div class="container">
     <div class="header">
-      <h1>Python Script Runner</h1>
-      <p>Render-Ready Web Service with Live Execution Output</p>
-      <div class="badge">Active & Ready to Deploy</div>
+      <h1>Universal Python Script Runner</h1>
+      <p>Executes whatever Python code is inside <code>script.py</code> &mdash; Render Ready</p>
+      <div class="badge">Live Execution Engine</div>
     </div>
 
     <div class="card">
       <div class="controls">
         <button id="runBtn" class="btn" onclick="runScript()">
           <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          Run Script (1 to 1000)
+          Execute script.py
         </button>
         <div id="stats" class="stats">Status: Ready to execute</div>
       </div>
@@ -184,10 +198,14 @@ HTML_TEMPLATE = """
             <span class="dot dot-yellow"></span>
             <span class="dot dot-green"></span>
           </div>
-          <span>python script.py (stdout)</span>
+          <span>python script.py (stdout & stderr)</span>
           <span id="lineCount">0 lines</span>
         </div>
-        <div id="terminal" class="terminal-body">Press "Run Script" to execute Python script and stream numbers 1 to 1000...</div>
+        <div id="terminal" class="terminal-body">Press "Execute script.py" to run whatever Python code is saved in script.py...</div>
+      </div>
+
+      <div class="info-callout">
+        💡 <strong>Universal Script Support:</strong> Paste <em>any</em> Python code into <code>script.py</code> (loops, web scraping, data processing, HTTP calls, etc.). The runner will execute it as a standalone process and display the full terminal output here.
       </div>
     </div>
 
@@ -205,8 +223,8 @@ HTML_TEMPLATE = """
 
       btn.disabled = true;
       btn.innerText = 'Running...';
-      stats.innerText = 'Executing script.py...';
-      term.innerText = 'Initializing execution...\\n';
+      stats.innerText = 'Executing python script.py...';
+      term.innerText = '[STARTING EXECUTION]\\n$ python script.py\\n-----------------------------------------\\n';
 
       const startTime = performance.now();
 
@@ -214,18 +232,24 @@ HTML_TEMPLATE = """
         const response = await fetch('/api/run');
         const data = await response.json();
         
-        term.innerText = data.output;
+        term.innerText += data.output;
         term.scrollTop = term.scrollHeight;
 
         const duration = Math.round(performance.now() - startTime);
-        stats.innerText = `Completed in ${duration} ms (Generated ${data.total} numbers)`;
-        lineCount.innerText = `${data.total + 2} lines`;
+        const lines = data.output ? data.output.split('\\n').length : 0;
+        
+        if (data.status === 'success') {
+          stats.innerHTML = `<span style="color: #22c55e;">Completed successfully</span> (${duration} ms | Exit Code: ${data.exit_code})`;
+        } else {
+          stats.innerHTML = `<span style="color: #ef4444;">Process Exited with Errors</span> (${duration} ms | Exit Code: ${data.exit_code})`;
+        }
+        lineCount.innerText = `${lines} lines`;
       } catch (err) {
-        term.innerText += `\\n[ERROR] Failed to run script: ${err.message}`;
+        term.innerText += `\\n[ERROR] Request failed: ${err.message}`;
         stats.innerText = 'Execution Failed';
       } finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Run Script (1 to 1000)';
+        btn.innerHTML = '<svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Execute script.py';
       }
     }
   </script>
@@ -239,23 +263,53 @@ def index():
 
 @app.route("/api/run")
 def api_run():
-    """Captures stdout of script.py and returns numbers 1 to 1000 in JSON."""
-    captured_output = io.StringIO()
-    sys.stdout = captured_output
+    """
+    Executes script.py as a standalone Python subprocess.
+    Works with ANY Python code pasted into script.py.
+    Captures stdout, stderr, and exit code.
+    """
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "script.py")
     
+    if not os.path.exists(script_path):
+        return jsonify({
+            "status": "error",
+            "exit_code": -1,
+            "output": f"[ERROR] script.py not found at {script_path}"
+        })
+
     start_time = time.time()
-    print_numbers(1, 1000)
-    sys.stdout = sys.__stdout__
-    
-    elapsed = round((time.time() - start_time) * 1000, 2)
-    output_text = captured_output.getvalue()
-    
-    return jsonify({
-        "status": "success",
-        "total": 1000,
-        "elapsed_ms": elapsed,
-        "output": output_text
-    })
+    try:
+        # Run script.py as a standard subprocess with a 120-second timeout
+        proc = subprocess.run(
+            [sys.executable, script_path],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        elapsed = round((time.time() - start_time) * 1000, 2)
+        
+        output = proc.stdout
+        if proc.stderr:
+            output += ("\n--- STANDARD ERROR ---\n" + proc.stderr if output else proc.stderr)
+            
+        return jsonify({
+            "status": "success" if proc.returncode == 0 else "error",
+            "exit_code": proc.returncode,
+            "elapsed_ms": elapsed,
+            "output": output or "[Script finished with no output]"
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            "status": "timeout",
+            "exit_code": -1,
+            "output": "[ERROR] Execution timed out (exceeded 120 seconds limit)."
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "exit_code": -1,
+            "output": f"[EXECUTION EXCEPTION] {str(e)}"
+        })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
