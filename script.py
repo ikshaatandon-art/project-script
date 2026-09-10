@@ -155,8 +155,91 @@ def audit_target(target_info):
         "max_lat": max_lat,
     }
 
+def generate_html_report(report_data):
+    """Saves a standalone visual HTML report that can be opened in any browser."""
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invertis ERP Concurrency & Rate-Limit Audit</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 30px; margin: 0; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 { color: #38bdf8; margin-bottom: 5px; font-size: 26px; }
+    p.sub { color: #94a3b8; margin-top: 0; margin-bottom: 25px; }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 30px; border: 1px solid #334155; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); }
+    h2 { color: #f1f5f9; font-size: 20px; margin-top: 0; display: flex; justify-content: space-between; align-items: center; }
+    .badge { padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; background: #ef4444; color: white; }
+    .metrics { display: flex; gap: 15px; margin: 15px 0; }
+    .metric-box { background: #0f172a; padding: 12px 16px; border-radius: 8px; flex: 1; border: 1px solid #334155; }
+    .metric-val { font-size: 22px; font-weight: bold; color: #38bdf8; }
+    .metric-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th { background: #334155; color: #f8fafc; text-align: left; padding: 10px; font-size: 14px; }
+    td { padding: 9px 10px; border-bottom: 1px solid #334155; font-size: 14px; }
+    tr:hover { background: rgba(56, 189, 248, 0.05); }
+    .status-200 { color: #4ade80; font-weight: 600; }
+    .status-warn { color: #f87171; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Invertis ERP Concurrency & Rate-Limit Audit Report</h1>
+    <p class="sub">Generated live via 3 concurrent workers | Paced rate: 5 req/s per worker (max 15 req/s total)</p>
+"""
+    for data in report_data:
+        all_200 = all(r["status"] == 200 for r in data["results"])
+        badge_text = "VULNERABLE (No Rate-Limiting)" if all_200 else "DEFENSE ACTIVE"
+        badge_color = "#ef4444" if all_200 else "#22c55e"
 
-with open("audit_report.html", "w", encoding="utf-8") as f:
+        html += f"""
+    <div class="card">
+      <h2>
+        <span>{data['name']} &mdash; <code style="color: #38bdf8; font-size: 16px;">{data['url']}</code></span>
+        <span class="badge" style="background: {badge_color};">{badge_text}</span>
+      </h2>
+      <div class="metrics">
+        <div class="metric-box"><div class="metric-val">{len(data['results'])}</div><div class="metric-label">Total Requests</div></div>
+        <div class="metric-box"><div class="metric-val">{data['total_time']}s</div><div class="metric-label">Total Duration</div></div>
+        <div class="metric-box"><div class="metric-val">{data['avg_lat']} ms</div><div class="metric-label">Avg Latency</div></div>
+        <div class="metric-box"><div class="metric-val">{data['max_lat']} ms</div><div class="metric-label">Peak Latency</div></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Worker ID</th>
+            <th>Request Sequence</th>
+            <th>Status Code</th>
+            <th>Latency (ms)</th>
+            <th>Defense State</th>
+          </tr>
+        </thead>
+        <tbody>
+"""
+        for r in data["results"]:
+            st_class = "status-200" if r["status"] == 200 else "status-warn"
+            st_text = f"HTTP {r['status']}"
+            def_text = "VULNERABLE (Accepted)" if r["status"] == 200 else "THROTTLED"
+            html += f """
+          <tr>
+            <td>Worker {r['worker']}</td>
+            <td>Request #{r['seq']}</td>
+            <td class="{st_class}">{st_text}</td>
+            <td>{r['latency_ms']} ms</td>
+            <td class="{st_class}">{def_text}</td>
+          </tr>
+  """
+        html += """
+        </tbody>
+      </table>
+    </div>
+"""
+    html += """
+  </div>
+</body>
+</html>
+"""
+    with open("audit_report.html", "w", encoding="utf-8") as f:
         f.write(html)
     print("  [+] Visual HTML Report generated: file://" + os.path.abspath("audit_report.html"))
 
