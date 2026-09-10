@@ -205,7 +205,7 @@ HTML_TEMPLATE = """
       </div>
 
       <div class="info-callout">
-        💡 <strong>Universal Script Support:</strong> Paste <em>any</em> Python code into <code>script.py</code> (loops, web scraping, data processing, HTTP calls, etc.). The runner will execute it as a standalone process and display the full terminal output here.
+        💡 <strong>Universal Script Support:</strong> Paste <em>any</em> Python code into <code>script.py</code> (loops, numbers 1-1000, calculations, HTTP requests, etc.). The runner will execute it as a standalone process and display the full terminal output here.
       </div>
     </div>
 
@@ -230,7 +230,19 @@ HTML_TEMPLATE = """
 
       try {
         const response = await fetch('/api/run');
-        const data = await response.json();
+        const rawText = await response.text();
+
+        // Safely parse JSON or handle raw HTML errors (like 502/504 timeouts)
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (jsonErr) {
+          // If the server or Render returned an HTML error page
+          const cleanError = rawText.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();
+          term.innerText += `\\n[SERVER HTTP ${response.status} ERROR]\\n` + (cleanError.slice(0, 500) || rawText.slice(0, 500));
+          stats.innerHTML = `<span style="color: #ef4444;">Server Error (HTTP ${response.status})</span>`;
+          return;
+        }
         
         term.innerText += data.output;
         term.scrollTop = term.scrollHeight;
@@ -245,7 +257,7 @@ HTML_TEMPLATE = """
         }
         lineCount.innerText = `${lines} lines`;
       } catch (err) {
-        term.innerText += `\\n[ERROR] Request failed: ${err.message}`;
+        term.innerText += `\\n[NETWORK ERROR] Could not reach runner: ${err.message}`;
         stats.innerText = 'Execution Failed';
       } finally {
         btn.disabled = false;
