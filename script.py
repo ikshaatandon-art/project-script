@@ -19,9 +19,9 @@ TARGETS = [
 
 # Configurable concurrency parameters
 NUM_WORKERS = 1000
-RATE_LIMIT_PER_WORKER = 1000     # requests per second per worker
-REQUESTS_PER_WORKER = 1000        # 5 requests per worker = 15 total requests per target
-PACING_DELAY = 0 / RATE_LIMIT_PER_WORKER  # 0.2s (200 ms interval)
+RATE_LIMIT_PER_WORKER = 10000    # requests per second per worker
+REQUESTS_PER_WORKER = 500        # 5 requests per worker = 15 total requests per target
+PACING_DELAY = 0  # 0.2s (200 ms interval)
 
 def fetch_session_tokens(target_url):
     """Retrieves session cookie and ASP.NET WebForms tokens from target."""
